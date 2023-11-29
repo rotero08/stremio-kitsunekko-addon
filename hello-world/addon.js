@@ -20,7 +20,7 @@ const server = http.createServer((req, res) => {
 	  });
     res.end(subtitle);
     // Optional: delete subtitle after serving
-    delete subtitlesStore[subtitleId];
+    // delete subtitlesStore[subtitleId];
   } else {
     res.writeHead(404);
     res.end();
@@ -64,7 +64,7 @@ builder.defineSubtitlesHandler(async ({ type, id }) => {
 			let name = ""
 			if (language === 'ja') {
 				const meta = await imdbScraper.getInfoByID(itemImdbId)
-				name = meta.title
+				name = meta.title.match(/^[^(]+/)[0].trim()
 			} else if (language === 'en') {
 				const metaResponse = await needle('get', `${addonEndpoint}/${type}/${itemImdbId}.json`);
 				const metaBody = metaResponse.body;
@@ -84,8 +84,6 @@ builder.defineSubtitlesHandler(async ({ type, id }) => {
 	try {
 		const nameEng = await fetchAndProcessSubtitles(languages[0])
 		const nameJap = await fetchAndProcessSubtitles(languages[1])
-		console.log(nameEng, 1);
-		console.log(nameJap, 2);
 		const subtitleUrl = await fetchSubtitles(nameEng, nameJap, season, episode);
 		if (!subtitleUrl) throw new Error("Subtitle URL not found");
   
@@ -111,10 +109,10 @@ builder.defineSubtitlesHandler(async ({ type, id }) => {
   });
 
   // Implement a cleanup mechanism (e.g., delete subtitles after 1 hour)
-  /*
+
 setInterval(() => {
 	subtitlesStore = {}; // Simplest form of cleanup
   }, 3600000 * 2); // 2 hours in milliseconds
-*/
+
 
 module.exports = builder.getInterface()
