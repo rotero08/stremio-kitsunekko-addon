@@ -100,7 +100,7 @@ builder.defineSubtitlesHandler(async ({ type, id }) => {
 		// Construct URL to serve the subtitle
 		const subtitleUrl2 = `http://localhost:${port}/${subtitleId}`;
 		console.log(subtitleUrl2);
-  
+
 		return { subtitles: [{ id: 9751926, url: subtitleUrl2, lang: "jpn" }] };
 	} catch (error) {
 	  console.error("Error fetching subtitles: ", error);
