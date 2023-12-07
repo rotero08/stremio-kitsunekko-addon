@@ -30,7 +30,9 @@ async function fetchName(name) {
 }
 
 async function fetchSubFile(name, season, episode) {
-  const response = await axios.get('https://kitsunekko.net/dirlist.php?dir=subtitles%2Fjapanese%2FGotoubun_No_Hanayome%2F');
+  const encodedName = encodeURIComponent(name);
+
+  const response = await axios.get(`https://kitsunekko.net/subtitles/japanese/${encodedName}/`);
   const $ = cheerio.load(response.data);
 
   let subTitles = [];
@@ -72,13 +74,13 @@ async function fetchSubtitles(nameEng, nameJap, season, episode) {
   console.log("JAPANESE");
   const japMatch = await fetchName(nameJap);
 
-  // Determine the best overall match
+  // Determine the best overall match (CHANGE WHEN POSSIBLE)
   const bestOverallMatch = japMatch.highestSimilarity < 0.5 ? engMatch.bestMatch : japMatch.bestMatch;
   console.log("BEST MATCH");
   console.log(bestOverallMatch);
   const encodedBestMatch = encodeURIComponent(bestOverallMatch);
 
-  const bestSubFile = fetchSubFile(nameJap, season, episode)
+  const bestSubFile = fetchSubFile(encodedBestMatch, season, episode)
 
   const subtitle = {
     id: 9751926,
