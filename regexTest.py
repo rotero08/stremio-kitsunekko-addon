@@ -3,15 +3,18 @@ from bs4 import BeautifulSoup
 import re
 
 # Updated patterns to include regex groups for capturing numbers
-season_pattern = r'\b(?:Season\s*|S)(\d{1,2})(?!\d)'
-episode_pattern = r'\b(?:S\d{1,2}E\s*|E\s*|Ep\.?\s*|Episode\s*)(\d{1,4})\b'
 notSeasonOrEpisode_pattern = r'(\d+[a-zA-Z0-9-ぁ-んァ-ン一-龯]*[a-zA-Zぁ-んァ-ン一-龯]+[a-zA-Z0-9-ぁ-んァ-ン一-龯]*\d*|\d*[a-zA-Z0-9-ぁ-んァ-ン一-龯]*[a-zA-Zぁ-んァ-ン一-龯]+[a-zA-Z0-9-ぁ-んァ-ン一-龯]*\d+)'
 two_numbers_pattern = r'(\b\d+\b)\s+(\b\d+\b)'
 
-def has_season(line):
+def create_patterns(season_number, episode_number):
+    season_pattern = rf'\b(?:Season\s*|S)(0*{season_number})(?!\d)'
+    episode_pattern = rf'\b(?:S\d{{1,2}}E\s*|E\s*|Ep\.?\s*|Episode\s*)(0*{episode_number})\b'
+    return season_pattern, episode_pattern
+
+def has_season(line, season_pattern):
     return re.search(season_pattern, line, re.IGNORECASE)
 
-def has_episode(line):
+def has_episode(line, episode_pattern):
     return re.search(episode_pattern, line, re.IGNORECASE) or numbers_in_line(line) == 1
 
 def has_two_separated_numbers(line):
@@ -23,12 +26,15 @@ def remove_pattern(line, pattern):
 def numbers_in_line(line):
     return len(re.findall(r'\d+', line))
 
-def analyze_text(line):
+def analyze_text(line, season, episode):
     results = []
+    file_found = False
     season_number = 0
     episode_number = 0
-    season_match = has_season(line)
-    episode_match = has_episode(line)
+
+    season_pattern, episode_pattern = create_patterns(season, episode)
+    season_match = has_season(line, season_pattern)
+    episode_match = has_episode(line, episode_pattern)
     
     if season_match:
         season_number = season_match.group(1)
@@ -59,7 +65,7 @@ def analyze_text(line):
                 results.append(f"Line '{line.strip()}': No season specified, assuming season 1; episode {episode_number} found directly.")
             except:
                 episode_number = re.findall(r'\d+', line)[0]
-                results.append(f"Line '{line.strip()}': No season specified, assuming season 1; episode is {episode_number} (remaining number).")
+            results.append(f"Line '{line.strip()}': No season specified, assuming season 1; episode is {episode_number} (remaining number).")
         else:
             # Not episode numbers are detected and deleted
             cleaned_line = remove_pattern(line, notSeasonOrEpisode_pattern)
@@ -78,7 +84,10 @@ def analyze_text(line):
                 else:
                     # Error since there are not exactly two numbers
                     results.append(f"ERROR: CleanedLine '{line.strip()}': Incorrect number of numbers found.")
-    return results, str(season_number).lstrip('0') , str(episode_number).lstrip('0')
+    if str(season_number).lstrip('0') == str(season) and str(episode_number).lstrip('0') == str(episode):
+        file_found = True
+    
+    return file_found, results, str(season_number).lstrip('0') , str(episode_number).lstrip('0')
 
 def get_subtitle_files_for_anime(base_url, anime_name):
     formatted_anime_name = anime_name.replace(' ', '+')
@@ -92,17 +101,24 @@ def get_subtitle_files_for_anime(base_url, anime_name):
 def main(anime_name, season, episode):
     base_url = 'https://kitsunekko.net/dirlist.php?dir=subtitles%2Fjapanese%2F'
     subtitle_files = get_subtitle_files_for_anime(base_url, anime_name)
+
     results = []
     for file in subtitle_files:
-        results.append(analyze_text(file))
+        file_found, analyze_results, season_number, episode_number = analyze_text(file, season, episode)
+        results.append((file_found, analyze_results, season_number, episode_number))
+        
+        # Break the loop if the file is found
+        if file_found:
+            break
 
     # Output results
     for result in results:
-        print(f"Season: {result[1]}, Episode: {result[2]}")
+        print(f"Found: {result[0]}, {result[1]}, Season: {result[2]}, Episode: {result[3]}")
 
+    #print(results)
 # Example usage
 if __name__ == "__main__":
-    anime_name = '16bit Sensation: Another Layer'
+    anime_name = 'Saihate no Paladin'
     season = 1
     episode = 1
     main(anime_name, season, episode)
