@@ -3,8 +3,8 @@ const cheerio = require('cheerio');
 
 const seasonPattern = /\b(?:Season\s*|S)(\d{1,2})(?!\d)/i;
 const episodePattern = /\b(?:S\d{1,2}E\s*|E\s*|Ep\.?\s*|Episode\s*)(\d{1,4})\b/i;
-const notSeasonOrEpisodePattern = /(\d+[a-zA-Z0-9-ぁ-んァ-ン一-龯]*[a-zA-Zぁ-んァ-ン一-龯]+[a-zA-Z0-9-ぁ-んァ-ン一-龯]*\d*|\d*[a-zA-Z0-9-ぁ-んァ-ン一-龯]*[a-zA-Zぁ-んァ-ン一-龯]+[a-zA-Z0-9-ぁ-んァ-ン一-龯]*\d+)/i;
-const twoNumbersPattern = /(\b\d+\b)\s+(\b\d+\b)/i;
+const notSeasonOrEpisodePattern = /(\d+[a-zA-Z0-9-ぁ-んァ-ン一-龯]*[a-zA-Zぁ-んァ-ン一-龯]+[a-zA-Z0-9-ぁ-んァ-ン一-龯]*\d*|\d*[a-zA-Z0-9-ぁ-んァ-ン一-龯]*[a-zA-Zぁ-んァ-ン一-龯]+[a-zA-Z0-9-ぁ-んァ-ン一-龯]*\d+)/gmi;
+const twoNumbersPattern = /(\b\d+\b)\s+(\b\d+\b)/gmi;
 
 function hasSeason(line) {
     return line.match(seasonPattern);
@@ -27,8 +27,9 @@ function numbersInLine(line) {
     return matches ? matches.length : 0;
 }
 
-function analyzeText(line) {
-    let results = [];
+function analyzeSubFile(line, season, episode) {
+    let status = [];
+    let fileFound = false;
     let seasonNumber = 0;
     let episodeNumber = 0;
     const seasonMatch = hasSeason(line);
@@ -39,52 +40,57 @@ function analyzeText(line) {
         let noSeasonLine = removePattern(line, seasonPattern);
 
         if (episodeMatch) {
-            try {
+            if (episodeMatch[1] !== undefined) {
                 episodeNumber = episodeMatch[1];
-                results.push(`Line '${line.trim()}': Season ${seasonNumber} and episode ${episodeNumber} found directly.`);
-            } catch (error) {
-                episodeNumber = line.match(/\d+/g)[0]
-                results.push(`Line '${line.trim()}': Season ${seasonNumber} and episode is ${episodeNumber} (remaining number).`);
+                status.push(`Line '${line.trim()}': Season ${seasonNumber} and episode ${episodeNumber} found directly.`);
+            } else {
+                episodeNumber = noSeasonLine.match(/\d+/g)[0];
+                status.push(`Line '${line.trim()}': Season ${seasonNumber} and episode is ${episodeNumber} (remaining number).`);
             }
         } else {
             let cleanedLine = removePattern(noSeasonLine, notSeasonOrEpisodePattern);
             if (numbersInLine(cleanedLine) === 1) {
                 episodeNumber = cleanedLine.match(/\d+/)[0];
-                results.push(`CleanedLine '${line.trim()}': Season ${seasonNumber} found, episode is ${episodeNumber} (remaining number).`);
+                status.push(`CleanedLine '${line.trim()}': Season ${seasonNumber} found, episode is ${episodeNumber} (remaining number).`);
             } else {
-                results.push(`ERROR: CleanedLine '${line.trim()}': Season ${seasonNumber} found but improper episode number.`);
+                status.push(`ERROR: CleanedLine '${line.trim()}': Season ${seasonNumber} found but improper episode number.`);
             }
         }
     } else {
         seasonNumber = 1;
         if (episodeMatch) {
-            try {
+            if (episodeMatch[1] !== undefined) {
                 episodeNumber = episodeMatch[1];
-                results.push(`Line '${line.trim()}': No season specified, assuming season 1; episode ${episodeNumber} found directly.`);
-            } catch (error) {
-                episodeNumber = line.match(/\d+/g)[0]
-                results.push(`Line '${line.trim()}': No season specified, assuming season 1; episode ${episodeNumber} found directly.`);
+                status.push(`Line '${line.trim()}': No season specified, assuming season 1; episode ${episodeNumber} found directly.`);
+            } else {
+                episodeNumber = line.match(/\d+/g)[0];
+                status.push(`Line '${line.trim()}': No season specified, assuming season 1; episode is ${episodeNumber} (remaining number).`);
             }
         } else {
             let cleanedLine = removePattern(line, notSeasonOrEpisodePattern);
             if (numbersInLine(cleanedLine) === 1) {
                 episodeNumber = cleanedLine.match(/\d+/)[0];
-                results.push(`CleanedLine '${line.trim()}': No season specified, assuming season 1; episode is ${episodeNumber} (remaining number).`);
+                status.push(`CleanedLine '${line.trim()}': No season specified, assuming season 1; episode is ${episodeNumber} (remaining number).`);
             } else {
                 if (numbersInLine(cleanedLine) === 2 && hasTwoSeparatedNumbers(cleanedLine)) {
                     const match = hasTwoSeparatedNumbers(cleanedLine);
                     [seasonNumber, episodeNumber] = match;
-                    results.push(`CleanedLine '${line.trim()}': Season ${seasonNumber} and episode ${episodeNumber} are the two remaining numbers found.`);
+                    status.push(`CleanedLine '${line.trim()}': Season ${seasonNumber} and episode ${episodeNumber} are the two remaining numbers found.`);
                 } else if (numbersInLine(cleanedLine) === 2) {
-                    results.push(`ERROR: CleanedLine '${line.trim()}': Two numbers found but not properly separated.`);
+                    status.push(`ERROR: CleanedLine '${line.trim()}': Two numbers found but not properly separated.`);
                 } else {
                     // Error since there are not exactly two numbers
-                    results.push(`ERROR: CleanedLine '${line.trim()}': Incorrect number of numbers found.`);
+                    status.push(`ERROR: CleanedLine '${line.trim()}': Incorrect number of numbers found.`);
                 }
             }
         }
     }
-    return results, seasonNumber, episodeNumber;
+
+    if (parseInt(seasonNumber) === parseInt(season) && parseInt(episodeNumber) === parseInt(episode)) {
+        fileFound = true;
+    }
+
+    return { fileFound, status, seasonNumber: parseInt(seasonNumber), episodeNumber: parseInt(episodeNumber) };
 }
 
 async function getSubtitleFilesForAnime(baseUrl, animeName) {
@@ -104,17 +110,25 @@ async function getSubtitleFilesForAnime(baseUrl, animeName) {
 
 async function main(animeName, season, episode) {
     const baseUrl = 'https://kitsunekko.net/dirlist.php?dir=subtitles%2Fjapanese%2F';
-    const subtitleFiles = await getSubtitleFilesForAnime(baseUrl, animeName);
+    const subtitleFiles = await getSubtitleFilesForAnime(baseUrl, animeName); // Assuming getSubtitleFilesForAnime is an async function
 
-    const results = [];
-    subtitleFiles.forEach(file => {
-        results.push(...analyzeText(file));
-    });
+    let results = [];
+    for (let file of subtitleFiles) {
+        let { fileFound, analyzeResults, seasonNumber, episodeNumber } = analyzeSubFile(file, season, episode);
+        results.push({ fileFound, analyzeResults, seasonNumber, episodeNumber });
+        
+        // Break the loop if the file is found
+        if (fileFound) {
+            break;
+        }
+    }
 
     // Output results
+    for (let result of results) {
+        console.log(`Season: ${result.seasonNumber}, Episode: ${result.episodeNumber}`);
+    }
+
     console.log(results);
-    results.forEach(result => console.log(result));
 }
 
-// Example usage
-main('16bit Sensation: Another Layer', 1, 1);
+module.exports = analyzeSubFile;

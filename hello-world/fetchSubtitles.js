@@ -1,6 +1,17 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 const natural = require('natural');
+const analyzeSubFile = require('./subtitleParser')
+
+function customEncodeURI(uri) {
+  // First, use the standard encodeURIComponent
+  let encodedURI = encodeURIComponent(uri);
+
+  // Then replace any underscores with '%5F'
+  encodedURI = encodedURI.replace(/_/g, '%5F');
+
+  return encodedURI;
+}
 
 async function fetchName(name) {
   const response = await axios.get('https://kitsunekko.net/dirlist.php?dir=subtitles%2Fjapanese%2F');
@@ -31,18 +42,40 @@ async function fetchName(name) {
 
 async function fetchSubFile(name, season, episode) {
   const encodedName = encodeURIComponent(name);
-
-  const response = await axios.get(`https://kitsunekko.net/subtitles/japanese/${encodedName}/`);
+  const response = await axios.get(`https://kitsunekko.net/dirlist.php?dir=subtitles%2Fjapanese%2F${encodedName}/`);
   const $ = cheerio.load(response.data);
 
-  let subTitles = [];
+  let subtitleFiles = [];
   $('a').each((i, element) => {
     const fileName = $(element).text().trim();
+    const fileLink = $(element).attr('href');
     if (fileName.endsWith('.srt') || fileName.endsWith('.vtt')) {
-      subTitles.push(fileName);
+      subtitleFiles.push({ fileName, fileLink });
     }
   });
 
+  let results = [];
+  let fileFound, correctFile, status, seasonNumber, episodeNumber;
+  for (let fileObj of subtitleFiles) {
+    ({ fileFound, status, seasonNumber, episodeNumber } = await analyzeSubFile(fileObj.fileName, season, episode));
+    results.push({ fileFound, status, seasonNumber, episodeNumber });
+
+    // Break the loop if the file is found and store the correct file object
+    if (fileFound) {
+      correctFile = fileObj;
+      break;
+    }
+  }
+
+  // Output results
+  for (let result of results) {
+    console.log(`Found: ${result.fileFound}, Status: ${result.status} Season: ${result.seasonNumber}, Episode: ${result.episodeNumber}`);
+  }
+
+  // Return the file name and link of the correct file, if found
+  return correctFile ? { fileName: correctFile.fileName, fileLink: correctFile.fileLink, seasonNumber, episodeNumber } : null;
+
+  /*
   let bestMatch = '';
   let highestSimilarity = 0;
   season = season || 1; // Default to season 1 if not specified
@@ -65,6 +98,7 @@ async function fetchSubFile(name, season, episode) {
   console.log(name, season, episode, "|||" , bestMatch, "|||", highestSimilarity);
 
   return { bestMatch, highestSimilarity };
+  */
 }
 
 
@@ -78,13 +112,17 @@ async function fetchSubtitles(nameEng, nameJap, season, episode) {
   const bestOverallMatch = japMatch.highestSimilarity < 0.5 ? engMatch.bestMatch : japMatch.bestMatch;
   console.log("BEST MATCH");
   console.log(bestOverallMatch);
-  const encodedBestMatch = encodeURIComponent(bestOverallMatch);
 
-  const bestSubFile = fetchSubFile(encodedBestMatch, season, episode)
+  const bestSubFile = await (await fetchSubFile(bestOverallMatch, season, episode)).fileLink
+
+  const encodedSubFile = customEncodeURI(bestSubFile)
+
+  console.log(encodedSubFile);
+  console.log(encodeURI(bestSubFile));
 
   const subtitle = {
     id: 9751926,
-    url: `https://kitsunekko.net/subtitles/japanese/${encodedBestMatch}/[SubsPlease]%20Shangri-La%20Frontier%20-%2002%20(720p)%20[F6FBB395].ja.ass`,
+    url: `https://kitsunekko.net/${bestSubFile}`,
     lang: 'jpn'
   }
 
