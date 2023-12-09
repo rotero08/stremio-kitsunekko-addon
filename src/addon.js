@@ -6,6 +6,15 @@ const http = require('http');
 const { v4: uuidv4 } = require('uuid')
 const imdbScraper = require('easyimdbscraper')
 
+/*
+WORK TO DO
+
+REFACTOR ALL THE CODE AND MAKE IT MORE MODULAR
+Add functionality for detecting seasons (better)
+Add functionality to take .rar .zip .7z
+Add functionality to be able to detect movie files
+*/
+
 // Store subtitles temporarily
 let subtitlesStore = {};
 
