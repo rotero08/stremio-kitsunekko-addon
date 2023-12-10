@@ -46,6 +46,4 @@ builder.defineSubtitlesHandler(async ({ type, id }) => {
 	return { subtitles };
   });
 
-setInterval(cleanUp, 3600000 * 2); // 2 hours in milliseconds
-
 module.exports = builder.getInterface()
